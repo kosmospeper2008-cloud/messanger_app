@@ -52,6 +52,9 @@ class Message(SQLModel, table=True):
     user_id: int = Field(foreign_key="users.telegram_id", nullable=False)
     text: str = Field(max_length=5000)
     created_at: Optional[datetime] = Field(default_factory=lambda: datetime.now(timezone.utc) + timedelta(hours=3))
+    
+    updated_at: Optional[datetime] = Field(default=None, nullable=True) 
+    is_deleted: bool = Field(default=False, nullable=False)
 
 
 
