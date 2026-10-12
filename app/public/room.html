@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Комната чата</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            padding: 24px;
+            background: #f3f5f7;
+            color: #263238;
+            font-family: "Segoe UI", sans-serif;
+        }
+        .room-page {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) 240px;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 20px;
+            width: min(1100px, 100%);
+            min-height: calc(100vh - 48px);
+            margin: 0 auto;
+            padding: 24px;
+            background: #fff;
+            border: 1px solid #d4dfe2;
+            border-radius: 8px;
+        }
+        .room-header {
+            grid-column: 1 / -1;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            border-bottom: 1px solid #dce4e5;
+        }
+        .room-header a { color: #176b87; }
+        .room-chat { display: flex; flex-direction: column; min-width: 0; }
+        .messages {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            align-items: flex-start;
+            gap: 10px;
+            min-height: 300px;
+            max-height: 65vh;
+            margin: 0 0 16px;
+            padding: 16px;
+            overflow-y: auto;
+            border: 1px solid #cbd7da;
+            border-radius: 6px;
+            background: #fbfcfc;
+        }
+        .message {
+            max-width: min(80%, 620px);
+            padding: 10px 12px;
+            border: 1px solid #dce5e6;
+            border-radius: 6px;
+            background: #fff;
+            overflow-wrap: anywhere;
+        }
+        .system-message { color: #176b87; background: #e8f3f5; }
+        .room-chat form { display: flex; gap: 10px; }
+        #messageInput {
+            flex: 1;
+            min-width: 0;
+            padding: 11px 12px;
+            border: 1px solid #cbd7da;
+            border-radius: 5px;
+            font: inherit;
+        }
+        .room-chat button {
+            padding: 10px 16px;
+            border: 0;
+            border-radius: 5px;
+            background: #176b87;
+            color: #fff;
+            font: inherit;
+            cursor: pointer;
+        }
+        .room-members { border-left: 1px solid #dce4e5; padding-left: 18px; }
+        .room-members h2 { margin-top: 0; font-size: 18px; }
+        #activeUsers { padding-left: 20px; }
+        #activeUsers li { margin: 8px 0; overflow-wrap: anywhere; }
+        .empty-state { margin: auto; color: #68787c; text-align: center; }
+        @media (max-width: 700px) {
+            body { padding: 10px; }
+            .room-page {
+                grid-template-columns: 1fr;
+                grid-template-rows: auto auto minmax(0, 1fr);
+                gap: 12px;
+                min-height: calc(100vh - 20px);
+                padding: 16px;
+            }
+            .room-header { grid-column: 1; flex-wrap: wrap; gap: 8px 16px; padding-bottom: 12px; }
+            .room-header h1 { margin: 8px 0; }
+            .room-members { grid-row: 2; border-left: 0; border-bottom: 1px solid #dce4e5; padding: 0 0 8px; }
+            .room-members h2 { margin-bottom: 8px; }
+            #activeUsers { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 0; }
+            .messages { min-height: 220px; max-height: none; }
+        }
+    </style>
+</head>
+<body>
+    <div class="room-page">
+        <header class="room-header">
+            <a href="/dashboard">← Назад к комнатам</a>
+            <h1 id="roomTitle">Комната</h1>
+        </header>
+
+
+        <main id="roomChat" class="room-chat" hidden>
+            <div id="roomMessages" class="messages"></div>
+
+            <form id="roomMessageForm">
+                <input type="text" id="messageInput" placeholder="Напишите сообщение..." required>
+                <button type="submit">Отправить</button>
+            </form>
+        </main>
+        <aside id="roomMembers" class="room-members" aria-live="polite" hidden>
+             
+            <section aria-label="Участники комнаты"> 
+                <h2>Участники</h2> 
+                <ul id="memberList"></ul> 
+                <p id="memberError" role="alert"></p> 
+                <button id="inviteMemberBtn" type="button" 
+                     hidden>Пригласить</button> 
+                <p id="inviteStatus" role="status"></p> 
+            </section> 
+            
+            <section aria-label="Сейчас онлайн"> 
+                    <h2>В комнате</h2>
+                    <ul id="activeUsers"></ul>
+            </section>
+
+        </aside>
+    </div>
+
+    <script src="/static/room.js"></script>
+</body>
+</html>

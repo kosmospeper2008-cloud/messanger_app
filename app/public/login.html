@@ -1,0 +1,99 @@
+<!-- frontend/login.html -->
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Вход через Telegram</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, Segoe UI, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .card {
+            background: white;
+            padding: 40px;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            width: 100%;
+            max-width: 420px;
+        }
+        h1 { font-size: 24px; margin-bottom: 8px; color: #1a1a1a; }
+        p.subtitle { color: #666; margin-bottom: 24px; font-size: 14px; }
+        
+        .step { margin-bottom: 24px; }
+        .step-title { font-weight: 600; margin-bottom: 8px; color: #1a1a1a; }
+        .step-desc { color: #666; font-size: 14px; margin-bottom: 12px; }
+        
+        .btn {
+            display: block;
+            width: 100%;
+            padding: 14px;
+            background: #0088cc;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            text-decoration: none;
+            text-align: center;
+            transition: background 0.2s;
+        }
+        .btn:hover { background: #006699; }
+        .btn:disabled { background: #ccc; cursor: not-allowed; }
+        
+        .btn-secondary {
+            background: #667eea;
+            margin-top: 12px;
+        }
+        .btn-secondary:hover { background: #5568d3; }
+        
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 12px;
+        }
+        input:focus { outline: none; border-color: #667eea; }
+        
+        .error { color: #e53e3e; font-size: 13px; margin-bottom: 12px; }
+        .hidden { display: none; }
+        
+        .timer { color: #888; font-size: 13px; text-align: center; margin-top: 8px; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>🔐 Вход через Telegram</h1>
+        <p class="subtitle">Без паролей и регистрации</p>
+
+        <!-- Шаг 1: Получение ссылки -->
+        <div id="step1" class="step">
+            <div class="step-title">Шаг 1: Открой бота</div>
+            <div class="step-desc">Нажми кнопку ниже, чтобы открыть Telegram-бота</div>
+            <a href="#" id="botLink" class="btn" target="_blank" onclick="openBot()">
+                🤖 Открыть Telegram-бота
+            </a>
+        </div>
+
+        <!-- Шаг 2: Ввод кода -->
+        <div id="step2" class="step hidden">
+            <div class="step-title">Шаг 2: Введи код</div>
+            <div class="step-desc">Код отправлен в бота</div>
+            <input type="text" id="code" placeholder="6 цифр" maxlength="6">
+            <div class="error" id="error"></div>
+            <button id="submitBtn" class="btn btn-secondary">Войти</button>
+            <div class="timer" id="timer"></div>
+        </div>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>

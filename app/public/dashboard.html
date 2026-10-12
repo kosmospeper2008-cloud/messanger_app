@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Мессенджер</title>
+    <style>
+    * {
+        box-sizing: border-box;
+    }
+
+    body {
+        margin: 0;
+        padding: 24px;
+        background: #f3f5f7;
+        color: #263238;
+        font-family: "Segoe UI", sans-serif;
+    }
+
+    .app {
+        display: grid;
+        grid-template-columns: 250px minmax(0, 1fr);
+        min-height: calc(100vh - 48px);
+        max-width: 1400px;
+        margin: 0 auto;
+        background: #fff;
+        border: 1px solid #d4dfe2;
+        border-radius: 8px;
+        overflow: hidden;
+    }
+
+    .sidebar {
+        padding: 24px 18px;
+        background: #f7f9f8;
+        border-right: 1px solid #dce4e5;
+    }
+
+    .profile-link {
+        display: inline-block;
+        margin: 8px 0 16px;
+        color: #176b87;
+    }
+
+    #roomList {
+        padding-left: 20px;
+    }
+
+    #roomList button,
+    #createRoomBtn {
+        padding: 8px 10px;
+        border: 1px solid #cbd7da;
+        border-radius: 5px;
+        background: #fff;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    #roomList button.active {
+        border-color: #176b87;
+        background: #e8f3f5;
+    }
+
+    .content {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        padding: 24px;
+    }
+
+    #roomHeader {
+        min-height: 48px;
+        padding-bottom: 14px;
+        border-bottom: 1px solid #e1e7e8;
+        font-size: 20px;
+        font-weight: 600;
+    }
+
+    #messages {
+        display: flex;
+        flex: 1;
+        flex-direction: column;
+        gap: 10px;
+        min-height: 300px;
+        max-height: 65vh;
+        margin: 18px 0;
+        padding: 16px;
+        overflow-y: auto;
+        border: 1px solid #cbd7da;
+        border-radius: 6px;
+        background: #fbfcfc;
+    }
+
+    .message {
+        align-self: flex-start;
+        max-width: min(80%, 620px);
+        padding: 10px 12px;
+        border: 1px solid #dce5e6;
+        border-radius: 6px;
+        background: #fff;
+        overflow-wrap: anywhere;
+    }
+
+    .empty-state {
+        margin: auto;
+        color: #68787c;
+        text-align: center;
+    }
+
+    #messageForm:not([hidden]) {
+        display: flex;
+        gap: 10px;
+    }
+
+    #messageInput {
+        flex: 1;
+        min-width: 0;
+        padding: 11px 12px;
+        border: 1px solid #cbd7da;
+        border-radius: 5px;
+        font: inherit;
+    }
+
+    #messageForm button {
+        padding: 10px 16px;
+        border: 0;
+        border-radius: 5px;
+        background: #176b87;
+        color: #fff;
+        font: inherit;
+        cursor: pointer;
+    }
+
+    #messageForm button:disabled {
+        opacity: 0.6;
+        cursor: wait;
+    }
+
+    @media (max-width: 700px) {
+        body {
+            padding: 12px;
+        }
+
+        .app {
+            grid-template-columns: 1fr;
+        }
+
+        .sidebar {
+            border-right: 0;
+            border-bottom: 1px solid #dce4e5;
+        }
+
+        .content {
+            padding: 16px;
+        }
+
+        #messages {
+            min-height: 240px;
+        }
+    }
+    #notificationBtn {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border: 1px solid #cbd7da;
+        border-radius: 5px;
+        background: #fff;
+        color: inherit;
+        cursor: pointer;
+    }
+
+    #unreadCount {
+        min-width: 20px;
+        padding: 2px 6px;
+        border-radius: 10px;
+        background: #176b87;
+        color: #fff;
+        font-size: 12px;
+        text-align: center;
+    }
+
+    #notificationPanel {
+        max-height: 50vh;
+        margin-top: 12px;
+        padding: 12px;
+        overflow-y: auto;
+        border: 1px solid #cbd7da;
+        border-radius: 6px;
+        background: #fff;
+    }
+
+    #notificationPanel[hidden] {
+        display: none;
+    }
+
+    #notificationList {
+        padding-left: 20px;
+    }
+
+    #notificationList li {
+        margin: 10px 0;
+        overflow-wrap: anywhere;
+    }
+</style>
+</head>
+<body>
+    <div class="app">
+        <aside class="sidebar">
+            <a class="profile-link" id="profileLink" href="/profile">Профиль</a>
+        
+            <button id="notificationBtn" type="button" aria-label="Уведомления" aria-expanded="false">
+                🔔<span id="unreadCount" aria-live="polite">0</span>
+            </button>
+            <section id="notificationPanel" aria-label="Уведомления" hidden>
+                <h2>Приглашения</h2>
+                <p id="notificationError" role="alert"></p>
+                <ul id="notificationList"></ul>
+            </section>
+
+            <h2>Комнаты</h2>
+            <button id="createRoomBtn">+ Создать комнату</button>
+            <ul id="roomList"></ul>
+        </aside>
+
+        <main class="content">
+            <div id="roomHeader">Выберите комнату</div>
+            <div id="messages" aria-live="polite">
+                <p class="empty-state">Выберите комнату, чтобы открыть переписку</p>
+            </div>
+            <form id="messageForm" hidden>
+                <input type="text" id="messageInput" placeholder="Напишите сообщение..." autocomplete="off">
+                <button type="submit">Отправить</button>
+            </form>
+        </main>
+    </div>
+    <script src="/static/dashboard.js"></script>
+    <script src="/static/notifications.js"></script>
+</body>
+</html>
