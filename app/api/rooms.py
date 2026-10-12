@@ -1,12 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import SQLModel, select
+from sqlmodel import Field, SQLModel, select, Field
 from api.models import ChatRoom, RoomMember, Message,User
 from api.auth import get_current_user
 from api.database import get_session
 from sqlalchemy import or_ 
+from datetime import datetime, timezone, timedelta
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
+
+class UpdateMessageRequest(SQLModel): 
+    text: str = Field(min_length=1, max_length=5000)
 
 
 @router.get("/") 
@@ -104,7 +108,7 @@ async def get_room_messages(room_id: int, user: User = Depends(get_current_user)
     result = await session.execute(
         select(Message, User.full_name, User.username)
         .join(User, Message.user_id == User.telegram_id)
-        .where(Message.room_id == room_id)
+        .where(Message.room_id == room_id, Message.is_deleted.is_(False))
         .order_by(Message.created_at.asc())
     )
     messages = result.all()
@@ -118,6 +122,7 @@ async def get_room_messages(room_id: int, user: User = Depends(get_current_user)
             "author_username": username,
             "text": message.text,
             "created_at": message.created_at.isoformat() if message.created_at else None,
+            "updated_at": message.updated_at.isoformat() if message.updated_at else None
         }
         for message, full_name, username in messages
     ]
@@ -131,11 +136,14 @@ class CreateMessageRequest(SQLModel):
 async def create_message(room_id: int, req: CreateMessageRequest, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     await _ensure_room_access(room_id, user, session)
 
-    message = Message(
-        room_id=room_id,
-        user_id=user.telegram_id,
-        text=req.text,
-    )
+    text = req.text.strip() 
+    if not text: 
+        raise HTTPException(status_code=422, detail="Текст сообщения не может быть пустым") 
+    message = Message( 
+        room_id=room_id, 
+        user_id=user.telegram_id, 
+        text=text, 
+        ) 
     session.add(message)
     await session.commit()
     await session.refresh(message)
@@ -147,6 +155,99 @@ async def create_message(room_id: int, req: CreateMessageRequest, user: User = D
         "text": message.text,
         "created_at": message.created_at.isoformat() if message.created_at else None,
     }
+
+
+@router.patch("/{room_id}/messages/{message_id}") 
+async def update_message( 
+    room_id: int, 
+    message_id: int, 
+    request: UpdateMessageRequest, 
+    user: User = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_session), 
+): 
+    await _ensure_room_access(room_id, user, session) 
+ 
+    result = await session.execute( 
+        select(Message).where( 
+            Message.id == message_id, 
+            Message.room_id == room_id, 
+        ) 
+    ) 
+    message = result.scalar_one_or_none() 
+    if message is None: 
+        raise HTTPException(status_code=404, detail="Сообщение не найдено") 
+    if message.user_id != user.telegram_id: 
+        raise HTTPException( 
+            status_code=403, 
+            detail="Нельзя редактировать чужое сообщение", 
+        ) 
+    if message.is_deleted: 
+        raise HTTPException( 
+            status_code=409, 
+            detail="Удалённое сообщение нельзя редактировать", 
+        ) 
+ 
+    text = request.text.strip() 
+    if not text: 
+        raise HTTPException(status_code=422, detail="Текст сообщения не может быть пустым") 
+    if len(text) > 5000: 
+        raise HTTPException( 
+            status_code=422, 
+            detail="Текст сообщения не должен превышать 5000 символов", 
+        ) 
+ 
+    message.text = text 
+    message.updated_at = datetime.now(timezone.utc) + timedelta(hours=3) 
+    await session.commit() 
+ 
+    return { 
+        "id": message.id, 
+        "room_id": message.room_id, 
+        "user_id": message.user_id, 
+        "author_full_name": user.full_name, 
+        "author_username": user.username, 
+        "text": message.text, 
+        "created_at": message.created_at.isoformat() if message.created_at else 
+None, 
+        "updated_at": message.updated_at.isoformat() if message.updated_at else 
+None, 
+    } 
+
+
+@router.delete( 
+    "/{room_id}/messages/{message_id}", 
+    status_code=status.HTTP_204_NO_CONTENT, 
+) 
+async def delete_message( 
+    room_id: int, 
+    message_id: int, 
+    user: User = Depends(get_current_user), 
+    session: AsyncSession = Depends(get_session), 
+): 
+    await _ensure_room_access(room_id, user, session) 
+ 
+    result = await session.execute( 
+        select(Message).where( 
+            Message.id == message_id, 
+            Message.room_id == room_id, 
+        ) 
+    ) 
+    message = result.scalar_one_or_none() 
+    if message is None: 
+        raise HTTPException(status_code=404, detail="Сообщение не найдено") 
+    if message.user_id != user.telegram_id: 
+        raise HTTPException( 
+            status_code=403, 
+            detail="Нельзя удалить чужое сообщение", 
+        ) 
+ 
+    if not message.is_deleted: 
+        message.is_deleted = True 
+        message.updated_at = datetime.now(timezone.utc) + timedelta(hours=3) 
+    await session.commit() 
+
+
+
 
 
 
@@ -361,3 +462,4 @@ member.joined_at else None,
         } 
         for member, profile in result.all() 
     ] 
+
