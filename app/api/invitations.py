@@ -1,14 +1,165 @@
-from datetime import datetime, timezone 
- 
-from fastapi import APIRouter, Depends, HTTPException, status 
-from sqlalchemy.exc import IntegrityError 
-from sqlmodel import SQLModel, select 
-from sqlalchemy.ext.asyncio import AsyncSession 
-from api.auth import get_current_user 
-from api.database import get_session 
-from api.models import ChatRoom, RoomInvitation, RoomMember, User 
+import hashlib
+import secrets
+import time
+
+from datetime import datetime, timezone
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import update
+from sqlalchemy.exc import IntegrityError
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import SQLModel, select
+
+from api.auth import get_current_user
+from api.database import get_session
+from api.models import ChatRoom, RoomInvitation, RoomInviteLink, RoomMember, User
  
 router = APIRouter(tags=["invitations"]) 
+
+
+def _hash_invite_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _validate_invite_link(invite: RoomInviteLink | None) -> RoomInviteLink:
+    if invite is None:
+        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена")
+    if invite.revoked_at is not None:
+        raise HTTPException(status_code=410, detail="Ссылка-приглашение отозвана")
+    if invite.expires_at <= int(time.time()):
+        raise HTTPException(status_code=410, detail="Срок действия ссылки истёк")
+    if invite.used_at is not None:
+        raise HTTPException(status_code=409, detail="Ссылка уже использована")
+    return invite
+
+
+@router.post("/rooms/{room_id}/invite-link", status_code=status.HTTP_201_CREATED)
+async def create_room_invite_link(
+    room_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    room = await session.get(ChatRoom, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Комната не найдена")
+    if room.created_by != user.telegram_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Создать ссылку может только создатель комнаты",
+        )
+
+    token = secrets.token_urlsafe(32)
+    expires_at = int(time.time()) + 24 * 60 * 60
+    invite = RoomInviteLink(
+        room_id=room_id,
+        created_by_id=user.telegram_id,
+        token_hash=_hash_invite_token(token),
+        expires_at=expires_at,
+    )
+    session.add(invite)
+    await session.commit()
+    await session.refresh(invite)
+
+    return {
+        "invite_id": invite.id,
+        "invite_path": f"/invite?token={token}",
+        "expires_at": expires_at,
+    }
+
+
+@router.get("/invite-links/{token}", dependencies=[Depends(get_current_user)])
+async def get_room_invite_link(
+    token: str,
+    session: AsyncSession = Depends(get_session),
+):
+    result = await session.execute(
+        select(RoomInviteLink).where(
+            RoomInviteLink.token_hash == _hash_invite_token(token)
+        )
+    )
+    invite = _validate_invite_link(result.scalar_one_or_none())
+
+    room = await session.get(ChatRoom, invite.room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Комната не найдена")
+
+    return {
+        "room_id": room.id,
+        "room_name": room.name,
+        "expires_at": invite.expires_at,
+    }
+
+
+@router.post("/invite-links/{token}/accept")
+async def accept_room_invite_link(
+    token: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    token_hash = _hash_invite_token(token)
+    result = await session.execute(
+        select(RoomInviteLink).where(RoomInviteLink.token_hash == token_hash)
+    )
+    invite = _validate_invite_link(result.scalar_one_or_none())
+
+    now = int(time.time())
+    claim_result = await session.execute(
+        update(RoomInviteLink)
+        .where(
+            RoomInviteLink.id == invite.id,
+            RoomInviteLink.used_at.is_(None),
+            RoomInviteLink.revoked_at.is_(None),
+            RoomInviteLink.expires_at > now,
+        )
+        .values(used_at=now)
+    )
+    if claim_result.rowcount != 1:
+        await session.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Ссылка уже использована, отозвана или просрочена",
+        )
+
+    membership_result = await session.execute(
+        select(RoomMember.id).where(
+            RoomMember.room_id == invite.room_id,
+            RoomMember.user_id == user.telegram_id,
+        )
+    )
+    already_member = membership_result.scalar_one_or_none() is not None
+    if not already_member:
+        session.add(RoomMember(room_id=invite.room_id, user_id=user.telegram_id))
+
+    await session.commit()
+    return {"room_id": invite.room_id, "already_member": already_member}
+
+
+@router.post("/rooms/{room_id}/invite-links/{invite_id}/revoke")
+async def revoke_room_invite_link(
+    room_id: int,
+    invite_id: int,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_session),
+):
+    room = await session.get(ChatRoom, room_id)
+    if room is None:
+        raise HTTPException(status_code=404, detail="Комната не найдена")
+    if room.created_by != user.telegram_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Отозвать ссылку может только создатель комнаты",
+        )
+
+    invite = await session.get(RoomInviteLink, invite_id)
+    if invite is None or invite.room_id != room_id:
+        raise HTTPException(status_code=404, detail="Ссылка-приглашение не найдена")
+    if invite.used_at is not None:
+        raise HTTPException(status_code=409, detail="Ссылка уже использована")
+    if invite.revoked_at is None:
+        invite.revoked_at = int(time.time())
+        await session.commit()
+
+    return {"ok": True}
 class InviteUserRequest(SQLModel): 
     telegram_id: int 
  

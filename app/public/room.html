@@ -68,6 +68,11 @@
             border-radius: 5px;
             font: inherit;
         }
+        #inviteLinkInput {
+            width: 100%;
+            margin: 8px 0;
+            padding: 8px;
+        }
         .room-chat button {
             padding: 10px 16px;
             border: 0;
@@ -98,70 +103,6 @@
             #activeUsers { display: flex; flex-wrap: wrap; gap: 4px 18px; margin-top: 0; }
             .messages { min-height: 220px; max-height: none; }
         }
-
-        .message-actions { 
-display: flex; 
-gap: 8px; 
-margin-top: 6px; 
-} 
-.message-actions button { 
-    padding: 3px 10px; 
-    border: 1px solid #cbd7da; 
-    border-radius: 4px; 
-    background: #f3f5f7; 
-    color: #263238; 
-    font-size: 13px; 
-    cursor: pointer; 
-} 
-.message-actions button:hover { 
-    background: #e0e7ea; 
-} 
-.message-actions .delete-btn:hover { 
-    background: #fbe9e7; 
-    border-color: #e57373; 
-    color: #c62828; 
-} 
-.message-edited { 
-    font-size: 12px; 
-    color: #90a4ae; 
-    margin-left: 6px; 
-} 
- 
-/* Диалог редактирования */ 
-dialog { 
-    max-width: 460px; 
-    width: 90%; 
-    padding: 24px; 
-    border: 1px solid #cbd7da; 
-    border-radius: 8px; 
-    box-shadow: 0 8px 32px rgba(0,0,0,0.12); 
-} 
-dialog::backdrop { 
-    background: rgba(0, 0, 0, 0.4); 
-} 
-dialog h2 { margin-top: 0; } 
-dialog textarea { 
-    width: 100%; 
-    min-height: 80px; 
-    padding: 10px; 
-    border: 1px solid #cbd7da; 
-    border-radius: 5px; 
-    font: inherit; 
-    resize: vertical; 
-} 
-dialog button { 
-    padding: 8px 16px; 
-    border: 0; 
-    border-radius: 5px; 
-    font: inherit; 
-    cursor: pointer; 
-    margin-right: 8px; 
-} 
-dialog button[type="submit"] { background: #176b87; color: #fff; } 
-dialog #cancelEditMessage { background: #e0e7ea; color: #263238; } 
-#editMessageError { color: #c62828; min-height: 20px; }
-
-
     </style>
 </head>
 <body>
@@ -186,8 +127,15 @@ dialog #cancelEditMessage { background: #e0e7ea; color: #263238; }
                 <h2>Участники</h2> 
                 <ul id="memberList"></ul> 
                 <p id="memberError" role="alert"></p> 
-                <button id="inviteMemberBtn" type="button" 
-                     hidden>Пригласить</button> 
+                <button id="inviteMemberBtn" type="button" hidden>
+                    Создать ссылку-приглашение
+                </button>
+                <div id="inviteLinkContainer" hidden>
+                    <label for="inviteLinkInput">Ссылка (действует 24 часа)</label>
+                    <input id="inviteLinkInput" type="url" readonly>
+                    <button id="copyInviteLinkBtn" type="button">Скопировать ссылку</button>
+                    <button id="revokeInviteLinkBtn" type="button">Отозвать ссылку</button>
+                </div>
                 <p id="inviteStatus" role="status"></p> 
             </section> 
             
@@ -198,19 +146,6 @@ dialog #cancelEditMessage { background: #e0e7ea; color: #263238; }
 
         </aside>
     </div>
-
-    <dialog id="editMessageDialog" aria-labelledby="editMessageTitle"> 
-        <form id="editMessageForm"> 
-            <h2 id="editMessageTitle">Редактировать сообщение</h2> 
-            <label for="editMessageText">Текст сообщения</label> 
-            <textarea id="editMessageText" maxlength="5000" required></textarea> 
-            <p id="editMessageError" role="alert"></p> 
-            <button type="submit">Сохранить</button> 
-            <button id="cancelEditMessage" type="button">Отмена</button> 
-        </form> 
-    </dialog>
-
-
 
     <script src="/static/room.js"></script>
 </body>

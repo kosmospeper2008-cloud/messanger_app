@@ -16,6 +16,13 @@ function clearToken() {
     localStorage.removeItem("access_token");
 }
 
+function getPostLoginPath() {
+    const inviteToken = sessionStorage.getItem("pendingInviteToken");
+    return inviteToken
+        ? `/invite?token=${encodeURIComponent(inviteToken)}`
+        : "/dashboard";
+}
+
 async function fetchWithAuth(url, options = {}) {
     const headers = new Headers(options.headers || {});
     const token = getToken();
@@ -51,7 +58,7 @@ async function checkAuth() {
 async function initLogin() {
     const user = await checkAuth();
     if (user) {
-        window.location.href = "/dashboard";
+        window.location.href = getPostLoginPath();
         return;
     }
 
@@ -141,7 +148,7 @@ async function verifyCode() {
 
         clearInterval(timerInterval);
         setToken(data.access_token);
-        window.location.href = "/dashboard";
+        window.location.href = getPostLoginPath();
     } catch (e) {
         errorEl.textContent = "Ошибка сети";
         btn.disabled = false;

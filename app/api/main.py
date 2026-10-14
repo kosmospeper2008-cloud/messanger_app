@@ -50,6 +50,11 @@ async def serve_room_page():
     return FileResponse(PUBLIC_DIR / "room.html")
 
 
+@app.get("/invite", include_in_schema=False)
+async def serve_invite_page():
+    return FileResponse(PUBLIC_DIR / "invite.html")
+
+
 app.include_router(rooms_router)
 app.include_router(auth_router)
 app.include_router(invitations_router)  

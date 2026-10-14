@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException,status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlmodel import Field, SQLModel, select, Field
+from sqlmodel import SQLModel, select, Field
 from api.models import ChatRoom, RoomMember, Message,User
 from api.auth import get_current_user
 from api.database import get_session
 from sqlalchemy import or_ 
-from datetime import datetime, timezone, timedelta
+from datetime import timezone,timedelta,datetime
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
 class UpdateMessageRequest(SQLModel): 
-    text: str = Field(min_length=1, max_length=5000)
-
+    text: str = Field(min_length=1, max_length=5000) 
 
 @router.get("/") 
 async def get_rooms( 
@@ -122,7 +121,8 @@ async def get_room_messages(room_id: int, user: User = Depends(get_current_user)
             "author_username": username,
             "text": message.text,
             "created_at": message.created_at.isoformat() if message.created_at else None,
-            "updated_at": message.updated_at.isoformat() if message.updated_at else None
+            "updated_at": message.updated_at.isoformat() if message.updated_at else None, 
+            
         }
         for message, full_name, username in messages
     ]
@@ -136,14 +136,15 @@ class CreateMessageRequest(SQLModel):
 async def create_message(room_id: int, req: CreateMessageRequest, user: User = Depends(get_current_user), session: AsyncSession = Depends(get_session)):
     await _ensure_room_access(room_id, user, session)
 
+
     text = req.text.strip() 
     if not text: 
         raise HTTPException(status_code=422, detail="Текст сообщения не может быть пустым") 
     message = Message( 
-        room_id=room_id, 
-        user_id=user.telegram_id, 
-        text=text, 
-        ) 
+                room_id=room_id, 
+                user_id=user.telegram_id, 
+                text=text
+            ) 
     session.add(message)
     await session.commit()
     await session.refresh(message)
@@ -195,7 +196,6 @@ async def update_message(
             status_code=422, 
             detail="Текст сообщения не должен превышать 5000 символов", 
         ) 
- 
     message.text = text 
     message.updated_at = datetime.now(timezone.utc) + timedelta(hours=3) 
     await session.commit() 
@@ -207,14 +207,13 @@ async def update_message(
         "author_full_name": user.full_name, 
         "author_username": user.username, 
         "text": message.text, 
-        "created_at": message.created_at.isoformat() if message.created_at else 
-None, 
-        "updated_at": message.updated_at.isoformat() if message.updated_at else 
-None, 
+        "created_at": message.created_at.isoformat() if message.created_at else None, 
+        "updated_at": message.updated_at.isoformat() if message.updated_at else None, 
     } 
 
 
-@router.delete( 
+
+router.delete( 
     "/{room_id}/messages/{message_id}", 
     status_code=status.HTTP_204_NO_CONTENT, 
 ) 
@@ -245,9 +244,6 @@ async def delete_message(
         message.is_deleted = True 
         message.updated_at = datetime.now(timezone.utc) + timedelta(hours=3) 
     await session.commit() 
-
-
-
 
 
 
@@ -462,4 +458,6 @@ member.joined_at else None,
         } 
         for member, profile in result.all() 
     ] 
+
+
 

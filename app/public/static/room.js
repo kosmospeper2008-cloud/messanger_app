@@ -1,7 +1,5 @@
 const API_BASE = window.location.origin;
 
-let currentUserTelegramId = null
-
 const roomId = new URLSearchParams(window.location.search).get("id");
 const clientId = crypto.randomUUID
     ? crypto.randomUUID()
@@ -15,6 +13,7 @@ let messagePollTimer = null;
 let heartbeatTimer = null;
 let leavingRoom = false;
 let roomSessionActive = false;
+let activeInviteLinkId = null;
 
 function getToken() {
     return localStorage.getItem("access_token");
@@ -32,22 +31,6 @@ async function fetchWithAuth(url, options = {}) {
     });
 }
 
-async function loadCurrentUserProfile() { 
-try { 
-const res = await fetchWithAuth(`${API_BASE}/api/profile`); 
-if (!res.ok) { 
-console.error("Не удалось загрузить профиль"); 
-return; 
-} 
-const profile = await res.json(); 
-currentUserTelegramId = profile.telegram_id; 
-} catch (error) { 
-console.error("Ошибка загрузки профиля:", error); 
-} 
-} 
-
-
-
 async function loadRoomDetails() {
     const res = await fetchWithAuth(`${API_BASE}/rooms/${roomId}`);
     if (res.status === 401) {
@@ -63,93 +46,48 @@ async function loadRoomDetails() {
     const inviteButton = document.getElementById("inviteMemberBtn"); 
     if (room.is_creator) { 
         inviteButton.hidden = false; 
-        inviteButton.addEventListener("click", inviteMember); 
+        inviteButton.addEventListener("click", createInviteLink);
+        document
+            .getElementById("copyInviteLinkBtn")
+            .addEventListener("click", copyInviteLink);
+        document
+            .getElementById("revokeInviteLinkBtn")
+            .addEventListener("click", revokeInviteLink);
     } 
 
     document.getElementById("roomTitle").textContent = room.name;
     return room;
 }
 
-async function loadMessages(reset = false) { 
-    const res = await fetchWithAuth(`${API_BASE}/rooms/${roomId}/messages`); 
-    if (!res.ok) return; 
- 
-    const messages = await res.json(); 
-    const container = document.getElementById("roomMessages"); 
- 
-    // Сохраняем позицию скролла, чтобы polling не сбрасывал чтение 
-    const scrollTop = container.scrollTop; 
-    const wasAtBottom = container.scrollHeight - container.scrollTop - 
-container.clientHeight < 30; 
- 
-    container.replaceChildren(); 
- 
-    if (messages.length === 0) { 
-        const empty = document.createElement("p"); 
-        empty.className = "empty-state"; 
-        empty.textContent = "Пока сообщений нет"; 
-        container.appendChild(empty); 
-        lastMessageId = 0; 
-        return; 
-    } 
- 
-    messages.forEach(msg => { 
-        const el = document.createElement("div"); 
-        el.className = "message"; 
-        el.dataset.messageId = msg.id; 
- 
-        // Имя автора 
-        const authorSpan = document.createElement("strong"); 
-        authorSpan.textContent = msg.author_full_name || `Пользователь 
-${msg.user_id}`; 
- 
-        // Текст сообщения 
-        const textSpan = document.createElement("span"); 
-        textSpan.className = "message-text"; 
-        textSpan.textContent = ": " + msg.text; 
- 
-        el.appendChild(authorSpan); 
-        el.appendChild(textSpan); 
- 
-        // Отметка «изменено» 
-        if (msg.updated_at) { 
-            const editedSpan = document.createElement("span"); 
-            editedSpan.className = "message-edited"; 
-            editedSpan.textContent = "(изменено)"; 
-            el.appendChild(editedSpan); 
-        } 
- 
-        // Кнопки действий только для автора 
-        if (currentUserTelegramId && msg.user_id === currentUserTelegramId) { 
-            const actions = document.createElement("div"); 
-            actions.className = "message-actions"; 
- 
-            const editBtn = document.createElement("button"); 
-            editBtn.textContent = "Редактировать"; 
-            editBtn.dataset.messageId = msg.id; 
-            editBtn.dataset.action = "edit"; 
- 
-            const deleteBtn = document.createElement("button"); 
-            deleteBtn.textContent = "Удалить"; 
-            deleteBtn.className = "delete-btn"; 
-            deleteBtn.dataset.messageId = msg.id; 
-            deleteBtn.dataset.action = "delete"; 
- 
-            actions.appendChild(editBtn); 
-            actions.appendChild(deleteBtn); 
-            el.appendChild(actions); 
-        } 
- 
-        container.appendChild(el); 
-        lastMessageId = Math.max(lastMessageId, msg.id); 
-    }); 
- 
-    // Восстанавливаем позицию скролла 
-    if (reset || wasAtBottom) { 
-        container.scrollTop = container.scrollHeight; 
-    } else { 
-        container.scrollTop = scrollTop; 
-    } 
+async function loadMessages(reset = false) {
+    const res = await fetchWithAuth(`${API_BASE}/rooms/${roomId}/messages`);
+    if (!res.ok) return;
+
+    const messages = await res.json();
+    const container = document.getElementById("roomMessages");
+    if (reset) {
+        container.replaceChildren();
+        lastMessageId = 0;
+    }
+
+    messages.forEach(msg => {
+        if (msg.id <= lastMessageId) return;
+
+        container.querySelector(".empty-state")?.remove();
+        const el = document.createElement("div");
+        el.className = "message";
+        const author = msg.author_full_name || `Пользователь ${msg.user_id}`;
+        el.textContent = `${author}: ${msg.text}`;
+        container.appendChild(el);
+        lastMessageId = Math.max(lastMessageId, msg.id);
+    });
+
+    if (lastMessageId === 0 && !container.children.length) {
+        const empty = document.createElement("p");
+        empty.className = "empty-state";
+        empty.textContent = "Пока сообщений нет";
+        container.appendChild(empty);
+    }
 }
 
 async function sendMessage(e) {
@@ -286,8 +224,6 @@ async function enterRoom() {
     document.getElementById("roomMessageForm").addEventListener("submit", sendMessage);
     roomSessionActive = true;
 
-    await loadCurrentUserProfile();
-
     await loadMessages(true);
     await sendPresenceHeartbeat();
     await pollRoomActivity();
@@ -326,152 +262,80 @@ async function loadRoomMembers() {
     } 
 } 
  
-async function inviteMember() { 
-    const input = window.prompt("Введите Telegram ID пользователя"); 
-    if (input === null) return; 
- 
-    const telegramId = Number(input.trim()); 
+async function createInviteLink() {
     const status = document.getElementById("inviteStatus"); 
+    const button = document.getElementById("inviteMemberBtn");
     status.textContent = ""; 
- 
-    if (!Number.isSafeInteger(telegramId) || telegramId <= 0) { 
-        status.textContent = "Введите корректный Telegram ID"; 
-        return; 
-    } 
- 
-    try { 
-        const response = await fetchWithAuth( 
-           `${API_BASE}/rooms/${roomId}/invite`, 
-            { 
-                method: "POST", 
-                body: JSON.stringify({ telegram_id: telegramId 
-}), 
-            } 
-        ); 
-        const result = await response.json(); 
-        if (!response.ok) { 
-            throw new Error(result.detail || "Не удалось отправить приглашение"); 
-        } 
- 
-        status.textContent = "Приглашение отправлено. Ожидается принятие."; 
-        // Намеренно не вызываем loadRoomMembers(): адресат еще не участник. 
-    } catch (error) { 
-        status.textContent = error.message; 
+    button.disabled = true;
+
+    try {
+        const response = await fetchWithAuth(
+            `${API_BASE}/rooms/${roomId}/invite-link`,
+            { method: "POST" }
+        );
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || "Не удалось создать ссылку.");
+        }
+
+        activeInviteLinkId = result.invite_id;
+        const inviteUrl = new URL(result.invite_path, window.location.origin).href;
+        document.getElementById("inviteLinkInput").value = inviteUrl;
+        document.getElementById("inviteLinkContainer").hidden = false;
+
+        try {
+            await navigator.clipboard.writeText(inviteUrl);
+            status.textContent = "Ссылка создана и скопирована. Она действует 24 часа.";
+        } catch {
+            status.textContent =
+                "Ссылка создана. Скопируйте её из поля выше; она действует 24 часа.";
+        }
+    } catch (error) {
+        status.textContent = error.message;
+    } finally {
+        button.disabled = false;
     }
 }
 
+async function copyInviteLink() {
+    const input = document.getElementById("inviteLinkInput");
+    const status = document.getElementById("inviteStatus");
+    try {
+        await navigator.clipboard.writeText(input.value);
+        status.textContent = "Ссылка скопирована.";
+    } catch {
+        input.focus();
+        input.select();
+        status.textContent =
+            "Не удалось скопировать автоматически. Скопируйте выделенный текст.";
+    }
+}
 
-// ===== Делегирование кликов по кнопкам сообщений ===== 
-document.getElementById("roomMessages").addEventListener("click", async (e) => { 
-    const btn = e.target.closest("[data-action]"); 
-    if (!btn) return; 
- 
-    const messageId = btn.dataset.messageId; 
-    const action = btn.dataset.action; 
- 
-    if (action === "edit") { 
-        openEditDialog(messageId); 
-    } else if (action === "delete") { 
-        await handleDelete(messageId, btn); 
-    } 
-}); 
- 
- 
-// ===== Редактирование ===== 
-let editingMessageId = null; 
- 
-function openEditDialog(messageId) { 
-    editingMessageId = messageId; 
- 
-    // Ищем текущий текст сообщения в DOM 
-    const msgEl = document.querySelector(`.message[data-message-id="${messageId}"]`); 
-    if (!msgEl) return; 
- 
-    const textSpan = msgEl.querySelector(".message-text"); 
-    // Убираем ": " в начале 
-    const currentText = textSpan ? textSpan.textContent.slice(2) : ""; 
- 
-    const dialog = document.getElementById("editMessageDialog"); 
-    const textarea = document.getElementById("editMessageText"); 
-    const errorEl = document.getElementById("editMessageError"); 
- 
-    textarea.value = currentText; 
-    errorEl.textContent = ""; 
-    dialog.showModal(); 
-} 
- 
-document.getElementById("editMessageForm").addEventListener("submit", async (e) => { 
-    e.preventDefault(); 
- 
-    const textarea = document.getElementById("editMessageText"); 
-    const errorEl = document.getElementById("editMessageError"); 
-    const submitBtn = e.target.querySelector("button[type='submit']"); 
-    const text = textarea.value.trim(); 
- 
-    errorEl.textContent = ""; 
- 
-    if (!text) { 
-        errorEl.textContent = "Текст не может быть пустым"; 
-        return; 
-    } 
-    if (text.length > 5000) { 
-        errorEl.textContent = "Текст не должен превышать 5000 символов"; 
-        return; 
-    } 
- 
-    submitBtn.disabled = true; 
-    try { 
-        const response = await fetchWithAuth( 
-            `${API_BASE}/rooms/${roomId}/messages/${editingMessageId}`, 
-            { 
-                method: "PATCH", 
-                body: JSON.stringify({ text }), 
-            } 
-        ); 
- 
-        if (response.ok) { 
-            document.getElementById("editMessageDialog").close(); 
-            await loadMessages(true); 
-        } else { 
-            const data = await response.json(); 
-            errorEl.textContent = data.detail || "Ошибка при сохранении"; 
-        } 
-    } catch (error) { 
-        errorEl.textContent = "Ошибка сети"; 
-    } finally { 
-        submitBtn.disabled = false; 
-    } 
-}); 
- 
-document.getElementById("cancelEditMessage").addEventListener("click", () => { 
-    document.getElementById("editMessageDialog").close(); 
-}); 
- 
- 
-// ===== Удаление ===== 
-async function handleDelete(messageId, btn) { 
-    if (!window.confirm("Вы уверены, что хотите удалить это сообщение?")) { 
-        return; 
-    } 
- 
-    btn.disabled = true; 
-    try { 
-        const response = await fetchWithAuth( 
-            `${API_BASE}/rooms/${roomId}/messages/${messageId}`, 
-            { method: "DELETE" } 
-        ); 
- 
-        if (response.status === 204 || response.ok) { 
-            await loadMessages(true); 
-        } else { 
-            const data = await response.json(); 
-            alert(data.detail || "Ошибка при удалении"); 
-        } 
-    } catch (error) { 
-        alert("Ошибка сети"); 
-    } finally { 
-        btn.disabled = false; 
-    } 
+async function revokeInviteLink() {
+    if (activeInviteLinkId === null) return;
+
+    const status = document.getElementById("inviteStatus");
+    const button = document.getElementById("revokeInviteLinkBtn");
+    button.disabled = true;
+    try {
+        const response = await fetchWithAuth(
+            `${API_BASE}/rooms/${roomId}/invite-links/${activeInviteLinkId}/revoke`,
+            { method: "POST" }
+        );
+        const result = await response.json();
+        if (!response.ok) {
+            throw new Error(result.detail || "Не удалось отозвать ссылку.");
+        }
+
+        activeInviteLinkId = null;
+        document.getElementById("inviteLinkContainer").hidden = true;
+        document.getElementById("inviteLinkInput").value = "";
+        status.textContent = "Ссылка отозвана.";
+    } catch (error) {
+        status.textContent = error.message;
+    } finally {
+        button.disabled = false;
+    }
 }
 
 
